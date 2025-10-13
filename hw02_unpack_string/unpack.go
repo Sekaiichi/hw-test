@@ -2,74 +2,35 @@ package hw02unpackstring
 
 import (
 	"errors"
-	"strings"
 	"unicode"
 )
 
 var ErrInvalidString = errors.New("invalid string")
 
 func Unpack(s string) (string, error) {
-	if s == "" {
-		return "", nil
-	}
+	runeArray := []rune(s)
 
-	var (
-		b          strings.Builder
-		lastRune   rune
-		hasLast    bool
-		escapeNext bool
-	)
-
-	emitRepeat := func(r rune, n int) {
-		if n <= 0 {
-			return
-		}
-		b.WriteString(strings.Repeat(string(r), n))
-	}
-
-	for _, r := range s {
-		if escapeNext {
-			if !(unicode.IsDigit(r) || r == '\\') {
-				return "", ErrInvalidString
-			}
-			if hasLast {
-				emitRepeat(lastRune, 1)
-			}
-			lastRune = r
-			hasLast = true
-			escapeNext = false
-			continue
-		}
-
-		switch {
-		case r == '\\':
-			escapeNext = true
-
-		case unicode.IsDigit(r):
-			if !hasLast {
-				return "", ErrInvalidString
-			}
-			repeat := int(r - '0')
-			emitRepeat(lastRune, repeat)
-			hasLast = false
-
-		default:
-			if hasLast {
-				emitRepeat(lastRune, 1)
-			}
-			lastRune = r
-			hasLast = true
-		}
-	}
-
-	// Конец строки
-	if escapeNext {
-		// Висячий слэш
+	newRuneArray := []rune{}
+	if (len(runeArray) > 0) && (unicode.IsDigit(runeArray[0])) {
 		return "", ErrInvalidString
 	}
-	if hasLast {
-		emitRepeat(lastRune, 1)
+
+	for i := 0; i < len(runeArray); i++ {
+		tempRune := runeArray[i]
+		if (i+1 < len(runeArray)) && (unicode.IsDigit(runeArray[i+1])) {
+			nextRuneIsDigit := i + 1
+			if (i+2 < len(runeArray)) && (unicode.IsDigit(runeArray[i+2])) {
+				return "", ErrInvalidString
+			}
+			differenceBetweenDigitRuneAndZero := int(runeArray[nextRuneIsDigit] - '0')
+			for j := 0; j < differenceBetweenDigitRuneAndZero; j++ {
+				newRuneArray = append(newRuneArray, tempRune)
+			}
+			i++
+		} else {
+			newRuneArray = append(newRuneArray, tempRune)
+		}
 	}
 
-	return b.String(), nil
+	return string(newRuneArray), nil
 }
