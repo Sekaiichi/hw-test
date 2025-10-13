@@ -10,7 +10,7 @@ var ErrInvalidString = errors.New("invalid string")
 func Unpack(s string) (string, error) {
 	runeArray := []rune(s)
 
-	newRuneArray := []rune{}
+	var newRuneArray []rune
 	if (len(runeArray) > 0) && (unicode.IsDigit(runeArray[0])) {
 		return "", ErrInvalidString
 	}
