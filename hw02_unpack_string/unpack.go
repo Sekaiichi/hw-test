@@ -29,11 +29,9 @@ func Unpack(s string) (string, error) {
 
 	for _, r := range s {
 		if escapeNext {
-			// Можно экранировать только цифру или '\' — иначе ошибка.
 			if !(unicode.IsDigit(r) || r == '\\') {
 				return "", ErrInvalidString
 			}
-			// Новая литеральная руна (как обычный символ).
 			if hasLast {
 				emitRepeat(lastRune, 1)
 			}
@@ -48,18 +46,14 @@ func Unpack(s string) (string, error) {
 			escapeNext = true
 
 		case unicode.IsDigit(r):
-			// Цифра – множитель к предыдущей руне.
 			if !hasLast {
-				// Нет предыдущей руны -> строка некорректна (начинается с цифры или идут подряд цифры).
 				return "", ErrInvalidString
 			}
 			repeat := int(r - '0')
 			emitRepeat(lastRune, repeat)
-			// После применения множителя предыдущая руна "израсходована".
 			hasLast = false
 
 		default:
-			// Пришла новая обычная руна.
 			if hasLast {
 				emitRepeat(lastRune, 1)
 			}
