@@ -1,4 +1,4 @@
-module github.com/sekaiichi/hw03_frequency_analysis
+module github.com/sekaiichi/hw-test/hw03_frequency_analysis
 
 go 1.22
 
