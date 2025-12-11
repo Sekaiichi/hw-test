@@ -4,11 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
+	_ "math"
 	"os"
 	"path/filepath"
-
-	"github.com/cheggaaa/pb/v3"
 )
 
 var (
@@ -19,102 +17,87 @@ var (
 	ErrSrcEqualsDst          = errors.New("destination file equals source file")
 )
 
-const (
-	readChunkSize = 256
-)
+const readChunkSize = 256
 
 type FileCopier struct {
-	fromPath, toPath string
-	offset, limit    int64
-
-	progress *pb.ProgressBar
+	fromPath string
+	toPath   string
+	offset   int64
+	limit    int64
 }
 
-func NewFileCopier(fromPath, toPath string, offset, limit int64, pb *pb.ProgressBar) *FileCopier {
+func NewFileCopier(fromPath, toPath string, offset, limit int64) *FileCopier {
 	return &FileCopier{
 		fromPath: fromPath,
 		toPath:   toPath,
 		offset:   offset,
 		limit:    limit,
-		progress: pb,
 	}
 }
 
 func (fc *FileCopier) Copy() error {
-	filesEqualErr := fc.validateFilesNotEqual()
-	if filesEqualErr != nil {
-		return filesEqualErr
+	if err := fc.validateFilesNotEqual(); err != nil {
+		return err
 	}
 
-	srcFile, openingErr := fc.openSrcFile()
-	if openingErr != nil {
-		return fmt.Errorf(ErrWithSrcFile.Error()+": %w", openingErr)
+	srcFile, err := fc.openSrcFile()
+	if err != nil {
+		return fmt.Errorf(ErrWithSrcFile.Error()+": %w", err)
 	}
 	defer srcFile.Close()
 
-	validationErr := fc.validateSrcFile(srcFile)
-	if validationErr != nil {
-		return fmt.Errorf(ErrWithSrcFile.Error()+": %w", validationErr)
+	if err := fc.validateSrcFile(srcFile); err != nil {
+		return fmt.Errorf(ErrWithSrcFile.Error()+": %w", err)
 	}
 
-	dstFile, fileCreateErr := fc.createDstFile()
-	if fileCreateErr != nil {
-		return fmt.Errorf(ErrWithDestFile.Error()+": %w", fileCreateErr)
+	dstFile, err := fc.createDstFile()
+	if err != nil {
+		return fmt.Errorf(ErrWithDestFile.Error()+": %w", err)
 	}
 	defer dstFile.Close()
 
-	buffer, readErr := fc.readSrcFile(srcFile)
-	if readErr != nil {
-		return fmt.Errorf(ErrWithSrcFile.Error()+": %w", readErr)
+	data, err := fc.readSrcFile(srcFile)
+	if err != nil {
+		return fmt.Errorf(ErrWithSrcFile.Error()+": %w", err)
 	}
 
-	_, writeErr := dstFile.Write(*buffer)
-	if writeErr != nil {
-		return fmt.Errorf(ErrWithDestFile.Error()+": %w", writeErr)
+	if _, err = dstFile.Write(*data); err != nil {
+		return fmt.Errorf(ErrWithDestFile.Error()+": %w", err)
 	}
 
 	return nil
 }
 
 func (fc *FileCopier) validateFilesNotEqual() error {
-	absFromPath, _ := filepath.Abs(fc.fromPath)
-	absToPath, _ := filepath.Abs(fc.toPath)
+	absFrom, _ := filepath.Abs(fc.fromPath)
+	absTo, _ := filepath.Abs(fc.toPath)
 
-	if absFromPath == absToPath {
+	if absFrom == absTo {
 		return ErrSrcEqualsDst
 	}
-
 	return nil
 }
 
 func (fc *FileCopier) openSrcFile() (*os.File, error) {
-	file, err := os.Open(fc.fromPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return file, nil
+	return os.Open(fc.fromPath)
 }
 
 func (fc *FileCopier) createDstFile() (*os.File, error) {
-	toFile, err := os.Create(fc.toPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return toFile, nil
+	return os.Create(fc.toPath)
 }
 
 func (fc *FileCopier) validateSrcFile(file *os.File) error {
-	fileInfo, err := file.Stat()
+	info, err := file.Stat()
 	if err != nil {
 		return err
 	}
 
-	fileSize := fileInfo.Size()
-	if fileSize == 0 { // for files with unknown size (e.g. /dev/urandom)
+	size := info.Size()
+	if size == 0 { // special files like /dev/urandom return 0
 		return ErrUnsupportedFile
-	} else if fileSize < fc.offset {
+	}
+
+	if size < fc.offset {
 		return ErrOffsetExceedsFileSize
 	}
 
@@ -122,9 +105,8 @@ func (fc *FileCopier) validateSrcFile(file *os.File) error {
 }
 
 func (fc *FileCopier) readSrcFile(file *os.File) (*[]byte, error) {
-	buffer := make([]byte, 0)
-	fileInfo, _ := file.Stat() // error suppressed because file already validated
-	fileSize := fileInfo.Size()
+	info, _ := file.Stat()
+	fileSize := info.Size()
 
 	var bytesToRead int64
 	if fc.limit <= 0 || fc.limit > fileSize || fc.offset+fc.limit > fileSize {
@@ -133,64 +115,34 @@ func (fc *FileCopier) readSrcFile(file *os.File) (*[]byte, error) {
 		bytesToRead = fc.limit
 	}
 
-	chunkSize := int64(readChunkSize)
-	if chunkSize > bytesToRead {
-		chunkSize = bytesToRead
+	chunk := int64(readChunkSize)
+	if chunk > bytesToRead {
+		chunk = bytesToRead
 	}
 
-	fc.startProgressBar(int64(math.Ceil(float64(bytesToRead) / float64(chunkSize))))
+	data := make([]byte, 0)
+	offsetNow := fc.offset
 
-	stepOffset := fc.offset
-	for (stepOffset - fc.offset) < bytesToRead {
-		remainingBytes := bytesToRead - (stepOffset - fc.offset)
-		if remainingBytes < chunkSize {
-			chunkSize = remainingBytes
+	for (offsetNow - fc.offset) < bytesToRead {
+		remaining := bytesToRead - (offsetNow - fc.offset)
+		if remaining < chunk {
+			chunk = remaining
 		}
 
-		// use tmpBuf to make correct step amount and process by exactly readChunkSize bytes
-		tmpBuf := make([]byte, 0, chunkSize)
+		tmp := make([]byte, chunk)
 
-		readBytes, readErr := file.ReadAt(tmpBuf[len(tmpBuf):cap(tmpBuf)], stepOffset)
-		tmpBuf = tmpBuf[:len(tmpBuf)+readBytes]
-		buffer = append(buffer, tmpBuf...)
+		n, err := file.ReadAt(tmp, offsetNow)
+		data = append(data, tmp[:n]...)
 
-		if readErr != nil {
-			if readErr == io.EOF {
+		if err != nil {
+			if err == io.EOF {
 				break
 			}
-
-			return nil, fmt.Errorf(ErrWithSrcFile.Error()+": %w", readErr)
+			return nil, err
 		}
 
-		stepOffset += int64(readBytes)
-		fc.incProgressBar()
+		offsetNow += int64(n)
 	}
 
-	fc.finishProgressBar()
-
-	return &buffer, nil
-}
-
-func (fc *FileCopier) startProgressBar(steps int64) {
-	if fc.progress == nil {
-		return
-	}
-
-	fc.progress.SetTotal(steps).Start()
-}
-
-func (fc *FileCopier) incProgressBar() {
-	if fc.progress == nil {
-		return
-	}
-
-	fc.progress.Increment()
-}
-
-func (fc *FileCopier) finishProgressBar() {
-	if fc.progress == nil {
-		return
-	}
-
-	fc.progress.Finish()
+	return &data, nil
 }

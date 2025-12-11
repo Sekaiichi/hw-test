@@ -4,8 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
-	"github.com/cheggaaa/pb/v3"
 )
 
 var (
@@ -23,7 +21,7 @@ func init() {
 func main() {
 	flag.Parse()
 
-	fileCopier := NewFileCopier(from, to, offset, limit, pb.New(0))
+	fileCopier := NewFileCopier(from, to, offset, limit)
 	err := fileCopier.Copy()
 	if err != nil {
 		fmt.Println(err)

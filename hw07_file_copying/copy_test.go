@@ -12,6 +12,7 @@ func TestCopyErrors(t *testing.T) {
 	offset := int64(0)
 	from := "testdata/input.txt"
 	to := "out.txt"
+
 	fromFileStat, err := os.Stat(from)
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +21,7 @@ func TestCopyErrors(t *testing.T) {
 	t.Run("offset more than filesize", func(t *testing.T) {
 		fileSize := fromFileStat.Size()
 
-		fileCopier := NewFileCopier(from, to, fileSize+100, limit, nil)
+		fileCopier := NewFileCopier(from, to, fileSize+100, limit)
 		copierErr := fileCopier.Copy()
 
 		require.ErrorIs(t, copierErr, ErrOffsetExceedsFileSize)
@@ -29,42 +30,43 @@ func TestCopyErrors(t *testing.T) {
 	t.Run("limit more than filesize", func(t *testing.T) {
 		fileSize := fromFileStat.Size()
 
-		fileCopier := NewFileCopier(from, to, offset, fileSize+100, nil)
+		fileCopier := NewFileCopier(from, to, offset, fileSize+100)
 		copierErr := fileCopier.Copy()
 
 		require.NoError(t, copierErr)
 	})
 
 	t.Run("unsupported file", func(t *testing.T) {
-		fileCopier := NewFileCopier("/dev/urandom", to, offset, limit, nil)
+		fileCopier := NewFileCopier("/dev/urandom", to, offset, limit)
 		copierErr := fileCopier.Copy()
 
 		require.ErrorIs(t, copierErr, ErrUnsupportedFile)
 	})
 
 	t.Run("negative offset", func(t *testing.T) {
-		fileCopier := NewFileCopier(from, to, -1, limit, nil)
+		fileCopier := NewFileCopier(from, to, -1, limit)
 		copierErr := fileCopier.Copy()
 
 		require.ErrorContains(t, copierErr, ErrWithSrcFile.Error())
 	})
 
 	t.Run("destination file problem", func(t *testing.T) {
-		fileCopier := NewFileCopier(from, "/root/out.txt", offset, limit, nil)
+		fileCopier := NewFileCopier(from, "/root/out.txt", offset, limit)
 		copierErr := fileCopier.Copy()
 
 		require.ErrorContains(t, copierErr, ErrWithDestFile.Error())
 	})
 
 	t.Run("destination file equals source file", func(t *testing.T) {
-		fileCopier := NewFileCopier(from, from, offset, limit, nil)
+		fileCopier := NewFileCopier(from, from, offset, limit)
 		copierErr := fileCopier.Copy()
 
 		require.ErrorContains(t, copierErr, ErrSrcEqualsDst.Error())
 	})
 
+	// cleanup
 	err = os.Remove(to)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
 }
