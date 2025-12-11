@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"os"
 )
 
 var (
@@ -18,5 +20,11 @@ func init() {
 
 func main() {
 	flag.Parse()
-	// Place your code here.
+
+	fileCopier := NewFileCopier(from, to, offset, limit)
+	err := fileCopier.Copy()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
